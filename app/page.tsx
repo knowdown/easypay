@@ -388,7 +388,7 @@ export default function Home() {
                   <input value={manualUpi} onChange={(event) => setManualUpi(event.target.value)} placeholder="vendor@bank" inputMode="email" aria-label="Vendor UPI ID" />
                   <button onClick={useManualUpi} disabled={!manualUpi.includes("@")}>Continue</button>
                 </div>
-                <button className="demo-link" onClick={() => handleQrResult("upi://pay?pa=freshbites@upi&pn=Fresh%20Bites%20Cafe&mc=5812&cu=INR")}>Use demo vendor</button>
+                <button className="demo-link" onClick={() => handleQrResult("upi://pay?pa=demo.vendor@invalid&pn=Demo%20Vendor&mc=0000&cu=INR")}>Use demo vendor</button>
               </section>
             )}
 
