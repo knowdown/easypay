@@ -1,0 +1,67 @@
+export type VendorUpi = {
+  raw: string;
+  vpa: string;
+  name: string;
+  amount: string;
+  amountLocked: boolean;
+  note: string;
+  reference: string;
+  merchantCode: string;
+};
+
+export function parseUpiQr(rawValue: string): VendorUpi {
+  const raw = rawValue.trim();
+  let uri: URL;
+
+  try {
+    uri = new URL(raw);
+  } catch {
+    throw new Error("This QR code does not contain a valid UPI payment link.");
+  }
+
+  if (uri.protocol.toLowerCase() !== "upi:" || uri.hostname.toLowerCase() !== "pay") {
+    throw new Error("Please scan a vendor UPI payment QR code.");
+  }
+
+  const vpa = uri.searchParams.get("pa")?.trim() ?? "";
+  if (!vpa || !/^[\w.+-]+@[\w.-]+$/i.test(vpa)) {
+    throw new Error("The QR code is missing a valid vendor UPI ID.");
+  }
+
+  const currency = uri.searchParams.get("cu");
+  if (currency && currency.toUpperCase() !== "INR") {
+    throw new Error("EasyPay currently supports INR vendor payments only.");
+  }
+
+  const amount = uri.searchParams.get("am")?.trim() ?? "";
+  if (amount && (!/^\d+(\.\d{1,2})?$/.test(amount) || Number(amount) <= 0)) {
+    throw new Error("The amount encoded in this QR code is invalid.");
+  }
+
+  return {
+    raw,
+    vpa,
+    name: uri.searchParams.get("pn")?.trim() || "UPI vendor",
+    amount,
+    amountLocked: Boolean(amount),
+    note: uri.searchParams.get("tn")?.trim() ?? "",
+    reference: uri.searchParams.get("tr")?.trim() ?? "",
+    merchantCode: uri.searchParams.get("mc")?.trim() ?? "",
+  };
+}
+
+export function buildUpiPaymentUri(
+  vendor: VendorUpi,
+  amount: string,
+  expenseLabel: string,
+  easyPayReference: string,
+) {
+  const uri = new URL(vendor.raw);
+  uri.searchParams.set("am", Number(amount).toFixed(2));
+  uri.searchParams.set("cu", "INR");
+
+  if (!vendor.reference) uri.searchParams.set("tr", easyPayReference);
+  if (!vendor.note) uri.searchParams.set("tn", `EasyPay expense: ${expenseLabel}`);
+
+  return uri.toString();
+}

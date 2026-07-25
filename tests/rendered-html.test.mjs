@@ -22,25 +22,32 @@ test("server-renders the EasyPay employee app", async () => {
   const html = await response.text();
   assert.match(html, /<title>EasyPay — Workplace payments, simplified<\/title>/i);
   assert.match(html, /Monthly Piti/);
-  assert.match(html, /Pay your share/);
+  assert.match(html, /Scan\. Pay\./);
   assert.match(html, /Quick payments/);
   assert.match(html, /Recent activity/);
   assert.doesNotMatch(html, /codex-preview|Your site is taking shape/);
 });
 
 test("keeps product data and metadata in the repository", async () => {
-  const [page, layout, data, packageJson] = await Promise.all([
+  const [page, layout, data, upi, packageJson] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
     readFile(new URL("../data/payments.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/upi.ts", import.meta.url), "utf8"),
     readFile(new URL("../package.json", import.meta.url), "utf8"),
   ]);
 
   assert.match(page, /paymentTypes/);
   assert.match(page, /paymentHistory/);
   assert.match(page, /inputMode="numeric"/);
+  assert.match(page, /Scan vendor UPI QR/);
+  assert.match(page, /UPI transaction ID/);
+  assert.match(page, /Pending verification/);
   assert.match(layout, /EasyPay/);
   assert.match(layout, /og\.png/);
   assert.match(data, /Monthly employee contribution/);
+  assert.match(upi, /upi:/);
+  assert.match(upi, /amountLocked/);
+  assert.match(packageJson, /qr-scanner/);
   assert.doesNotMatch(packageJson, /react-loading-skeleton/);
 });
