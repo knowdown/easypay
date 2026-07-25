@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type QrScanner from "qr-scanner";
 import { paymentHistory, paymentTypes } from "../data/payments";
-import { buildUpiPaymentUri, parseUpiQr, type VendorUpi } from "../lib/upi";
+import { buildUpiPaymentUri, createUpiNumberRecipient, parseUpiQr, type VendorUpi } from "../lib/upi";
 
 type Tab = "home" | "payments" | "history" | "profile";
 type ExpenseStep = "closed" | "scan" | "confirm" | "return" | "submitted";
@@ -46,6 +46,7 @@ export default function Home() {
   const [expenseNote, setExpenseNote] = useState("");
   const [scanError, setScanError] = useState("");
   const [manualUpi, setManualUpi] = useState("");
+  const [recipientEntry, setRecipientEntry] = useState<"upi-id" | "phone">("upi-id");
   const [utr, setUtr] = useState("");
   const [receiptName, setReceiptName] = useState("");
   const [expenseReference, setExpenseReference] = useState("");
@@ -119,6 +120,7 @@ export default function Home() {
     setExpenseNote("");
     setScanError("");
     setManualUpi("");
+    setRecipientEntry("upi-id");
     setUtr("");
     setReceiptName("");
     setExpenseReference(`EPX${Date.now().toString().slice(-10)}`);
@@ -153,6 +155,18 @@ export default function Home() {
     handleQrResult(
       `upi://pay?pa=${encodeURIComponent(manualUpi.trim())}&pn=${encodeURIComponent("Vendor")}&cu=INR`,
     );
+  }
+
+  function usePhoneNumber() {
+    try {
+      const recipient = createUpiNumberRecipient(manualUpi);
+      setVendor(recipient);
+      setAmount("");
+      setScanError("");
+      setExpenseStep("confirm");
+    } catch (error) {
+      setScanError(error instanceof Error ? error.message : "Enter a valid UPI Number.");
+    }
   }
 
   function launchUpiApp() {
@@ -210,7 +224,7 @@ export default function Home() {
 
       <section className="phone" aria-label="EasyPay employee payment app">
         <header className="mobile-header">
-          <div className="brand"><span className="brand-mark">e</span><span>easypay</span></div>
+          <div className="brand"><span className="brand-mark">e</span><span>easypay</span><span className="live-badge">LIVE</span></div>
           <button className="avatar" aria-label="Open profile" onClick={() => setTab("profile")}>AS</button>
         </header>
 
@@ -383,12 +397,31 @@ export default function Home() {
                   <input type="file" accept="image/*" onChange={(event) => void scanUploadedQr(event.target.files?.[0])} />
                   Upload QR image
                 </label>
-                <div className="manual-divider"><span>or enter the vendor&apos;s UPI ID</span></div>
-                <div className="manual-upi">
-                  <input value={manualUpi} onChange={(event) => setManualUpi(event.target.value)} placeholder="vendor@bank" inputMode="email" aria-label="Vendor UPI ID" />
-                  <button onClick={useManualUpi} disabled={!manualUpi.includes("@")}>Continue</button>
+                <div className="manual-divider"><span>or enter recipient details</span></div>
+                <div className="recipient-tabs" role="tablist" aria-label="Recipient identifier">
+                  <button className={recipientEntry === "upi-id" ? "active" : ""} onClick={() => { setRecipientEntry("upi-id"); setManualUpi(""); setScanError(""); }}>UPI ID</button>
+                  <button className={recipientEntry === "phone" ? "active" : ""} onClick={() => { setRecipientEntry("phone"); setManualUpi(""); setScanError(""); }}>Phone / UPI Number</button>
                 </div>
-                <button className="demo-link" onClick={() => handleQrResult("upi://pay?pa=demo.vendor@invalid&pn=Demo%20Vendor&mc=0000&cu=INR")}>Use demo vendor</button>
+                <div className="manual-upi">
+                  <input
+                    value={manualUpi}
+                    onChange={(event) => setManualUpi(recipientEntry === "phone" ? event.target.value.replace(/\D/g, "").slice(0, 10) : event.target.value)}
+                    placeholder={recipientEntry === "phone" ? "10-digit mobile number" : "vendor@bank"}
+                    inputMode={recipientEntry === "phone" ? "tel" : "email"}
+                    aria-label={recipientEntry === "phone" ? "Vendor UPI Number" : "Vendor UPI ID"}
+                  />
+                  <button
+                    onClick={recipientEntry === "phone" ? usePhoneNumber : useManualUpi}
+                    disabled={recipientEntry === "phone" ? manualUpi.length !== 10 : !manualUpi.includes("@")}
+                  >
+                    Continue
+                  </button>
+                </div>
+                {recipientEntry === "phone" && (
+                  <p className="upi-number-help">
+                    The number must be registered by the vendor as their interoperable UPI Number. Your UPI app will resolve it before payment.
+                  </p>
+                )}
               </section>
             )}
 
@@ -397,8 +430,23 @@ export default function Home() {
                 <p className="eyebrow">STEP 2 OF 3</p><h2>Confirm vendor and expense</h2>
                 <div className="vendor-card">
                   <span className="vendor-avatar">{vendor.name.slice(0, 1).toUpperCase()}</span>
-                  <div><b>{vendor.name}</b><small>{vendor.vpa}</small></div><span className="verified-vendor">✓ UPI</span>
+                  <div><b>{vendor.name}</b><small>{vendor.recipientType === "upi-number" ? `UPI Number · ${vendor.vpa}` : vendor.vpa}</small></div>
+                  <span className={vendor.recipientType === "upi-number" ? "resolve-vendor" : "verified-vendor"}>
+                    {vendor.recipientType === "upi-number" ? "Resolve in app" : "✓ UPI"}
+                  </span>
                 </div>
+                {vendor.recipientType === "upi-number" && (
+                  <>
+                    <label className="text-field">
+                      <span>Vendor name for the expense</span>
+                      <input value={vendor.name === "UPI Number recipient" ? "" : vendor.name} onChange={(event) => setVendor({ ...vendor, name: event.target.value || "UPI Number recipient" })} placeholder="Enter vendor name" />
+                    </label>
+                    <div className="recipient-warning">
+                      <b>Verify before entering your PIN</b>
+                      <p>PhonePe or Google Pay must resolve this number to a UPI account. Continue only if the verified recipient name shown there matches your vendor.</p>
+                    </div>
+                  </>
+                )}
                 <label className="amount-field">
                   <span>Amount {vendor.amountLocked && "· Set by vendor QR"}</span>
                   <div><b>₹</b><input value={amount} readOnly={vendor.amountLocked} onChange={(event) => setAmount(event.target.value.replace(/[^\d.]/g, ""))} inputMode="decimal" placeholder="0" /></div>
@@ -406,7 +454,13 @@ export default function Home() {
                 <label className="select-field"><span>Expense category</span><select value={expenseCategory} onChange={(event) => setExpenseCategory(event.target.value)}>{expenseCategories.map((category) => <option key={category}>{category}</option>)}</select></label>
                 <label className="text-field"><span>Note for accounts <i>Optional</i></span><input value={expenseNote} onChange={(event) => setExpenseNote(event.target.value)} placeholder="What was this expense for?" /></label>
                 <div className="personal-account-note"><b>Paying from your personal account</b><p>Your UPI app will let you choose the linked bank account. EasyPay cannot access your PIN.</p></div>
-                <button className="primary-button" onClick={launchUpiApp} disabled={!amount || Number(amount) <= 0}>Choose UPI app & pay <span>→</span></button>
+                <button
+                  className="primary-button"
+                  onClick={launchUpiApp}
+                  disabled={!amount || Number(amount) <= 0 || (vendor.recipientType === "upi-number" && vendor.name === "UPI Number recipient")}
+                >
+                  Choose UPI app & pay <span>→</span>
+                </button>
                 <small className="secure-copy">PhonePe, Google Pay, BHIM or another installed UPI app</small>
               </section>
             )}

@@ -1,4 +1,5 @@
 export type VendorUpi = {
+  recipientType: "vpa" | "upi-number";
   raw: string;
   vpa: string;
   name: string;
@@ -39,6 +40,7 @@ export function parseUpiQr(rawValue: string): VendorUpi {
   }
 
   return {
+    recipientType: "vpa",
     raw,
     vpa,
     name: uri.searchParams.get("pn")?.trim() || "UPI vendor",
@@ -47,6 +49,25 @@ export function parseUpiQr(rawValue: string): VendorUpi {
     note: uri.searchParams.get("tn")?.trim() ?? "",
     reference: uri.searchParams.get("tr")?.trim() ?? "",
     merchantCode: uri.searchParams.get("mc")?.trim() ?? "",
+  };
+}
+
+export function createUpiNumberRecipient(phoneNumber: string): VendorUpi {
+  const number = phoneNumber.replace(/\D/g, "");
+  if (!/^[6-9]\d{9}$/.test(number)) {
+    throw new Error("Enter a valid 10-digit Indian mobile number.");
+  }
+
+  return {
+    recipientType: "upi-number",
+    raw: `upi://pay?pa=${number}&pn=${encodeURIComponent("UPI Number recipient")}&cu=INR`,
+    vpa: number,
+    name: "UPI Number recipient",
+    amount: "",
+    amountLocked: false,
+    note: "",
+    reference: "",
+    merchantCode: "",
   };
 }
 
@@ -59,6 +80,7 @@ export function buildUpiPaymentUri(
   const uri = new URL(vendor.raw);
   uri.searchParams.set("am", Number(amount).toFixed(2));
   uri.searchParams.set("cu", "INR");
+  if (vendor.recipientType === "upi-number") uri.searchParams.set("pn", vendor.name);
 
   if (!vendor.reference) uri.searchParams.set("tr", easyPayReference);
   if (!vendor.note) uri.searchParams.set("tn", `EasyPay expense: ${expenseLabel}`);

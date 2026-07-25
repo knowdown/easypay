@@ -41,13 +41,17 @@ test("keeps product data and metadata in the repository", async () => {
   assert.match(page, /paymentHistory/);
   assert.match(page, /inputMode="numeric"/);
   assert.match(page, /Scan vendor UPI QR/);
+  assert.match(page, /Phone \/ UPI Number/);
+  assert.match(page, /Verify before entering your PIN/);
   assert.match(page, /UPI transaction ID/);
   assert.match(page, /Pending verification/);
+  assert.doesNotMatch(page, /Use demo vendor/);
   assert.match(layout, /EasyPay/);
   assert.match(layout, /og\.png/);
   assert.match(data, /Monthly employee contribution/);
   assert.match(upi, /upi:/);
   assert.match(upi, /amountLocked/);
+  assert.match(upi, /createUpiNumberRecipient/);
   assert.match(packageJson, /qr-scanner/);
   assert.doesNotMatch(packageJson, /react-loading-skeleton/);
 });
