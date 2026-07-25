@@ -38,7 +38,6 @@ export default function Home() {
   const [selectedPayment, setSelectedPayment] = useState(paymentTypes[0]);
   const [amount, setAmount] = useState("1500");
   const [showSheet, setShowSheet] = useState(false);
-  const [paid, setPaid] = useState(false);
   const [query, setQuery] = useState("");
   const [expenseStep, setExpenseStep] = useState<ExpenseStep>("closed");
   const [vendor, setVendor] = useState<VendorUpi | null>(null);
@@ -109,14 +108,13 @@ export default function Home() {
   function startPayment(payment = paymentTypes[0]) {
     setSelectedPayment(payment);
     setAmount(payment.suggestedAmount.toString());
-    setPaid(false);
     setShowSheet(true);
   }
 
-  function startVendorExpense() {
+  function startVendorExpense(category = expenseCategories[0]) {
     setVendor(null);
     setAmount("");
-    setExpenseCategory(expenseCategories[0]);
+    setExpenseCategory(expenseCategories.includes(category) ? category : expenseCategories[0]);
     setExpenseNote("");
     setScanError("");
     setManualUpi("");
@@ -244,7 +242,7 @@ export default function Home() {
                   <h3>Scan their UPI QR</h3>
                   <p>Pay with your personal UPI app and save the expense.</p>
                 </div>
-                <button className="primary-button" onClick={startVendorExpense}>
+                <button className="primary-button" onClick={() => startVendorExpense()}>
                   Scan & pay <span>→</span>
                 </button>
               </section>
@@ -253,14 +251,22 @@ export default function Home() {
                 <div><p className="card-label">NEXT CONTRIBUTION</p><span className="status-pill">Due in 5 days</span></div>
                 <h3>{money.format(1500)}</h3>
                 <p>Monthly Piti · July 2026</p>
-                <button className="secondary-light-button" onClick={() => startPayment()}>Pay monthly piti <span>→</span></button>
+                <button className="secondary-light-button" onClick={() => startPayment()}>Piti setup required <span>→</span></button>
               </section>
 
               <section className="section-block">
                 <div className="section-heading"><h3>Quick payments</h3><button onClick={() => setTab("payments")}>View all</button></div>
                 <div className="quick-grid">
                   {paymentTypes.slice(0, 4).map((payment) => (
-                    <button className="quick-item" key={payment.id} onClick={() => startPayment(payment)}>
+                    <button
+                      className="quick-item"
+                      key={payment.id}
+                      onClick={() => payment.id === "piti" ? startPayment(payment) : startVendorExpense(
+                        payment.id === "meals" ? "Meals & refreshments" :
+                        payment.id === "travel" ? "Local travel" :
+                        "Other business expense",
+                      )}
+                    >
                       <span className={`quick-icon ${payment.color}`}>{payment.icon}</span>
                       <span>{payment.shortTitle}</span>
                     </button>
@@ -282,7 +288,7 @@ export default function Home() {
             <section className="inner-page">
               <p className="eyebrow">PAYMENTS</p>
               <h2>What would you like to pay?</h2>
-              <button className="vendor-pay-banner" onClick={startVendorExpense}>
+              <button className="vendor-pay-banner" onClick={() => startVendorExpense()}>
                 <span className="scan-card-icon">⌗</span>
                 <span><b>Scan vendor UPI QR</b><small>Pay a work expense from your personal account</small></span>
                 <i>›</i>
@@ -290,7 +296,14 @@ export default function Home() {
               <p className="list-label">OTHER ORGANISATION PAYMENTS</p>
               <div className="payment-list">
                 {paymentTypes.map((payment) => (
-                  <button key={payment.id} onClick={() => startPayment(payment)}>
+                  <button
+                    key={payment.id}
+                    onClick={() => payment.id === "piti" ? startPayment(payment) : startVendorExpense(
+                      payment.id === "meals" ? "Meals & refreshments" :
+                      payment.id === "travel" ? "Local travel" :
+                      "Other business expense",
+                    )}
+                  >
                     <span className={`quick-icon ${payment.color}`}>{payment.icon}</span>
                     <span><b>{payment.title}</b><small>{payment.description}</small></span>
                     <i>›</i>
@@ -351,22 +364,18 @@ export default function Home() {
           <div className="sheet-backdrop" role="presentation" onMouseDown={() => setShowSheet(false)}>
             <section className="payment-sheet" role="dialog" aria-modal="true" aria-label="Complete payment" onMouseDown={(event) => event.stopPropagation()}>
               <button className="sheet-close" onClick={() => setShowSheet(false)} aria-label="Close">×</button>
-              {!paid ? (
-                <>
-                  <span className={`sheet-icon ${selectedPayment.color}`}>{selectedPayment.icon}</span>
-                  <p className="eyebrow">ORGANISATION PAYMENT</p>
-                  <h2>{selectedPayment.title}</h2><p>{selectedPayment.description}</p>
-                  <label className="amount-field"><span>Amount</span><div><b>₹</b><input value={amount} onChange={(event) => setAmount(event.target.value.replace(/\D/g, ""))} inputMode="numeric" /></div></label>
-                  <button className="primary-button" onClick={() => setPaid(true)}>Continue with UPI <span>→</span></button>
-                  <small className="secure-copy">You will complete payment in your preferred UPI app.</small>
-                </>
-              ) : (
-                <div className="success-state">
-                  <span className="success-check">✓</span><p className="eyebrow">READY FOR UPI</p><h2>Payment prepared.</h2>
-                  <p>The production version will open your installed UPI app for this organisation payment.</p>
-                  <button className="primary-button" onClick={() => setShowSheet(false)}>Done</button>
-                </div>
-              )}
+              <span className={`sheet-icon ${selectedPayment.color}`}>{selectedPayment.icon}</span>
+              <p className="eyebrow">PAYEE SETUP REQUIRED</p>
+              <h2>{selectedPayment.title}</h2>
+              <p>
+                This payment cannot be initiated until the organisation&apos;s
+                approved receiving UPI ID and display name are configured.
+              </p>
+              <div className="setup-required-note">
+                <b>No bank login is needed</b>
+                <p>EasyPay only needs the organisation&apos;s receiving UPI ID. Employees still authorise payment from their own bank account inside PhonePe, Google Pay, or another UPI app.</p>
+              </div>
+              <button className="primary-button" onClick={() => setShowSheet(false)}>Back to payments</button>
             </section>
           </div>
         )}
