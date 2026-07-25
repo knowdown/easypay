@@ -60,7 +60,7 @@ export function createUpiNumberRecipient(phoneNumber: string): VendorUpi {
 
   return {
     recipientType: "upi-number",
-    raw: `upi://pay?pa=${number}&pn=${encodeURIComponent("UPI Number recipient")}&cu=INR`,
+    raw: `upi-number:${number}`,
     vpa: number,
     name: "UPI Number recipient",
     amount: "",
@@ -77,10 +77,12 @@ export function buildUpiPaymentUri(
   expenseLabel: string,
   easyPayReference: string,
 ) {
+  if (vendor.recipientType !== "vpa") {
+    throw new Error("A UPI Number must be resolved inside the payer's UPI app.");
+  }
   const uri = new URL(vendor.raw);
   uri.searchParams.set("am", Number(amount).toFixed(2));
   uri.searchParams.set("cu", "INR");
-  if (vendor.recipientType === "upi-number") uri.searchParams.set("pn", vendor.name);
 
   if (!vendor.reference) uri.searchParams.set("tr", easyPayReference);
   if (!vendor.note) uri.searchParams.set("tn", `EasyPay expense: ${expenseLabel}`);
