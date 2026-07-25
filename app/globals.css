@@ -222,6 +222,69 @@ button { color: inherit; }
 .submitted-step .receipt b { overflow-wrap: anywhere; text-align: right; }
 .pending-text { color: #9a6421; }
 
+.phonepe-test-page {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: #f2f1ed;
+}
+
+.phonepe-test-card {
+  width: min(100%, 520px);
+  padding: 30px;
+  border: 1px solid rgba(31, 50, 40, 0.12);
+  border-radius: 28px;
+  background: #fff;
+  box-shadow: 0 24px 70px rgba(31, 50, 40, 0.12);
+}
+
+.phonepe-test-card h1 {
+  margin: 12px 0 8px;
+  color: #1f3228;
+  font-size: clamp(1.8rem, 8vw, 2.6rem);
+}
+
+.preprod-warning {
+  margin: 20px 0;
+  padding: 14px 16px;
+  border: 1px solid #e3c46f;
+  border-radius: 16px;
+  background: #fff7d9;
+  color: #5a4310;
+}
+
+.preprod-warning p {
+  margin: 4px 0 0;
+}
+
+.phonepe-status {
+  margin-top: 20px;
+  padding: 16px;
+  border-radius: 16px;
+  background: #f5f7f5;
+}
+
+.phonepe-status pre {
+  overflow: auto;
+  max-height: 340px;
+  padding: 12px;
+  border-radius: 12px;
+  background: #17221c;
+  color: #eaf5ee;
+  font-size: 0.75rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.phonepe-back-link {
+  display: inline-block;
+  margin-top: 22px;
+  color: #286442;
+  font-weight: 700;
+  text-decoration: none;
+}
+
 @media (max-width: 800px) {
   .site-shell { display: block; }
   .desktop-story { display: none; }

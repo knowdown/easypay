@@ -52,6 +52,22 @@ npm run dev
 
 Then open `http://localhost:3000`.
 
+## PhonePe preproduction checkout test
+
+The isolated `/phonepe-test` route exercises PhonePe Standard Checkout against
+the preproduction endpoints. It is deliberately separate from the scanned
+vendor payment flow: PhonePe PG settles to the merchant account associated with
+the supplied credentials and cannot dynamically redirect settlement to each
+scanned vendor.
+
+Copy `.env.example` to `.env.local` and fill in the Client ID, Client Version,
+and Client Secret issued by PhonePe. Never commit `.env.local` or the Client
+Secret. The server exchanges these values for an OAuth token, creates a
+preproduction checkout order, redirects the browser to PhonePe, and checks the
+Order Status API when PhonePe redirects back. The returned sandbox status and
+transaction identifiers are saved to the current device's local test history;
+a shared organisation ledger will require the EasyPay backend database.
+
 ## Build
 
 ```bash
