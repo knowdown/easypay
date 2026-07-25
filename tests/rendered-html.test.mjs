@@ -43,11 +43,12 @@ test("keeps product data and metadata in the repository", async () => {
   assert.match(page, /Scan vendor UPI QR/);
   assert.match(page, /Phone \/ UPI Number/);
   assert.match(page, /Verify before entering your PIN/);
-  assert.match(page, /does not send an unverified browser payment intent/);
+  assert.match(page, /standard upi:\/\/pay intent/);
   assert.match(page, /UPI transaction ID/);
   assert.match(page, /Pending verification/);
-  assert.doesNotMatch(page, /window\.location\.assign/);
-  assert.doesNotMatch(page, /buildUpiPaymentUri/);
+  assert.match(page, /window\.location\.assign/);
+  assert.match(page, /buildUpiPaymentUri/);
+  assert.match(page, /easypay-pending-payment/);
   assert.doesNotMatch(page, /Use demo vendor/);
   assert.doesNotMatch(page, /The production version will open/);
   assert.match(page, /PAYEE SETUP REQUIRED/);

@@ -70,3 +70,34 @@ export function createUpiNumberRecipient(phoneNumber: string): VendorUpi {
     merchantCode: "",
   };
 }
+
+export function buildUpiPaymentUri(
+  vendor: VendorUpi,
+  amount: string,
+  expenseLabel: string,
+) {
+  if (vendor.recipientType !== "vpa") {
+    throw new Error("A UPI Number must be resolved inside the payer's UPI app.");
+  }
+
+  const uri = new URL(vendor.raw);
+  if (uri.searchParams.has("sign")) {
+    // Signed UPI QR payloads must be handed to the PSP byte-for-byte. Changing
+    // even a display field or amount can invalidate the acquiring PSP's signature.
+    return vendor.raw;
+  }
+
+  uri.searchParams.set("pa", vendor.vpa);
+  uri.searchParams.set("pn", vendor.name.trim());
+  uri.searchParams.set("am", Number(amount).toFixed(2));
+  uri.searchParams.set("cu", "INR");
+
+  // Preserve QR-issued merchant fields such as mc, tr, tid, mode, orgid and sign.
+  // For a manually entered UPI ID, add only a human-readable note; EasyPay must
+  // not manufacture acquiring-bank or merchant identifiers.
+  if (!uri.searchParams.get("tn")) {
+    uri.searchParams.set("tn", `EasyPay expense: ${expenseLabel}`.slice(0, 80));
+  }
+
+  return uri.toString();
+}

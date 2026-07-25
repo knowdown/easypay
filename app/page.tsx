@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type QrScanner from "qr-scanner";
 import { paymentHistory, paymentTypes } from "../data/payments";
-import { createUpiNumberRecipient, parseUpiQr, type VendorUpi } from "../lib/upi";
+import { buildUpiPaymentUri, createUpiNumberRecipient, parseUpiQr, type VendorUpi } from "../lib/upi";
 
 type Tab = "home" | "payments" | "history" | "profile";
 type ExpenseStep = "closed" | "scan" | "confirm" | "app-handoff" | "return" | "submitted";
@@ -16,6 +16,13 @@ type LocalExpense = {
   utr: string;
   receipt: string;
   date: string;
+};
+type PendingPayment = {
+  vendor: VendorUpi;
+  amount: string;
+  category: string;
+  note: string;
+  reference: string;
 };
 
 const money = new Intl.NumberFormat("en-IN", {
@@ -32,6 +39,11 @@ const expenseCategories = [
   "Repairs & maintenance",
   "Other business expense",
 ];
+const placeholderVendorNames = new Set(["UPI vendor", "UPI Number recipient"]);
+
+function vendorNameRequired(vendor: VendorUpi) {
+  return placeholderVendorNames.has(vendor.name);
+}
 
 export default function Home() {
   const [tab, setTab] = useState<Tab>("home");
@@ -59,7 +71,24 @@ export default function Home() {
       const saved = localStorage.getItem("easypay-expenses");
       if (saved) setLocalExpenses(JSON.parse(saved));
     } catch {
-      // The expense history simply starts empty if local storage is unavailable.
+      // The expense history starts empty if local storage is unavailable.
+    }
+
+    try {
+      const pending = sessionStorage.getItem("easypay-pending-payment");
+      if (pending) {
+        const payment = JSON.parse(pending) as PendingPayment;
+        if (payment.vendor?.vpa && Number(payment.amount) > 0) {
+          setVendor(payment.vendor);
+          setAmount(payment.amount);
+          setExpenseCategory(payment.category);
+          setExpenseNote(payment.note);
+          setExpenseReference(payment.reference);
+          setExpenseStep("return");
+        }
+      }
+    } catch {
+      // A pending payment cannot be recovered if session storage is unavailable.
     }
   }, []);
 
@@ -113,6 +142,11 @@ export default function Home() {
   }
 
   function startVendorExpense(category = expenseCategories[0]) {
+    try {
+      sessionStorage.removeItem("easypay-pending-payment");
+    } catch {
+      // The payment flow still works if session storage is unavailable.
+    }
     setVendor(null);
     setAmount("");
     setExpenseCategory(expenseCategories.includes(category) ? category : expenseCategories[0]);
@@ -153,7 +187,7 @@ export default function Home() {
 
   function useManualUpi() {
     handleQrResult(
-      `upi://pay?pa=${encodeURIComponent(manualUpi.trim())}&pn=${encodeURIComponent("Vendor")}&cu=INR`,
+      `upi://pay?pa=${encodeURIComponent(manualUpi.trim())}&cu=INR`,
     );
   }
 
@@ -178,6 +212,27 @@ export default function Home() {
       setCopiedValue("");
     }
     setExpenseStep("app-handoff");
+  }
+
+  function launchUpiApp() {
+    if (!vendor || vendor.recipientType !== "vpa" || !amount || Number(amount) <= 0 || vendorNameRequired(vendor)) return;
+
+    const pendingPayment: PendingPayment = {
+      vendor,
+      amount,
+      category: expenseCategory,
+      note: expenseNote,
+      reference: expenseReference,
+    };
+    try {
+      sessionStorage.setItem("easypay-pending-payment", JSON.stringify(pendingPayment));
+    } catch {
+      // The browser can still launch the UPI app without return-state recovery.
+    }
+
+    const uri = buildUpiPaymentUri(vendor, amount, expenseCategory);
+    setExpenseStep("return");
+    window.location.assign(uri);
   }
 
   async function copyPaymentValue(value: "recipient" | "amount") {
@@ -213,7 +268,21 @@ export default function Home() {
     } catch {
       // Submission still completes when browser storage is unavailable.
     }
+    try {
+      sessionStorage.removeItem("easypay-pending-payment");
+    } catch {
+      // The submitted state remains available for the current page session.
+    }
     setExpenseStep("submitted");
+  }
+
+  function cancelPendingPayment() {
+    try {
+      sessionStorage.removeItem("easypay-pending-payment");
+    } catch {
+      // Returning to the confirmation screen does not depend on storage.
+    }
+    setExpenseStep("confirm");
   }
 
   return (
@@ -460,19 +529,26 @@ export default function Home() {
                     {vendor.recipientType === "upi-number" ? "Resolve in app" : "UPI ID"}
                   </span>
                 </div>
-                {vendor.recipientType === "upi-number" && (
+                {vendorNameRequired(vendor) && (
                   <>
                     <label className="text-field">
                       <span>Vendor name for the expense</span>
-                      <input value={vendor.name === "UPI Number recipient" ? "" : vendor.name} onChange={(event) => setVendor({ ...vendor, name: event.target.value || "UPI Number recipient" })} placeholder="Enter vendor name" />
+                      <input
+                        value={placeholderVendorNames.has(vendor.name) ? "" : vendor.name}
+                        onChange={(event) => setVendor({
+                          ...vendor,
+                          name: event.target.value || (vendor.recipientType === "upi-number" ? "UPI Number recipient" : "UPI vendor"),
+                        })}
+                        placeholder="Enter the vendor's real name"
+                      />
                     </label>
                     <div className="recipient-warning">
                       <b>Verify before entering your PIN</b>
-                      <p>PhonePe or Google Pay must resolve this number to a UPI account. Continue only if the verified recipient name shown there matches your vendor.</p>
+                      <p>PhonePe or Google Pay must resolve this payment address. Continue only if the verified recipient name shown there matches your vendor.</p>
                     </div>
                   </>
                 )}
-                {vendor.recipientType === "vpa" && (
+                {vendor.recipientType === "vpa" && !vendorNameRequired(vendor) && (
                   <div className="recipient-warning">
                     <b>Verify the recipient in your UPI app</b>
                     <p>EasyPay can read the UPI ID from a QR, but only your UPI app can resolve the current account holder. Pay only if its verified name matches the vendor.</p>
@@ -487,14 +563,21 @@ export default function Home() {
                 <div className="personal-account-note"><b>Paying from your personal account</b><p>Your UPI app will let you choose the linked bank account. EasyPay cannot access your PIN.</p></div>
                 <button
                   className="primary-button"
-                  onClick={() => void prepareUpiPayment()}
-                  disabled={!amount || Number(amount) <= 0 || (vendor.recipientType === "upi-number" && vendor.name === "UPI Number recipient")}
+                  onClick={vendor.recipientType === "vpa" ? launchUpiApp : () => void prepareUpiPayment()}
+                  disabled={!amount || Number(amount) <= 0 || vendorNameRequired(vendor)}
                 >
-                  Continue to UPI app instructions <span>→</span>
+                  {vendor.recipientType === "vpa" ? "Open PhonePe or UPI app" : "Continue with UPI Number"} <span>→</span>
                 </button>
                 <small className="secure-copy">
-                  Recipient and amount are copied; EasyPay does not send an unverified browser payment intent
+                  {vendor.recipientType === "vpa"
+                    ? "Opens the standard upi://pay intent using the scanned or confirmed vendor details"
+                    : "UPI Numbers are resolved inside the selected UPI app"}
                 </small>
+                {vendor.recipientType === "vpa" && (
+                  <button className="text-button" onClick={() => void prepareUpiPayment()}>
+                    Copy details instead
+                  </button>
+                )}
               </section>
             )}
 
@@ -505,9 +588,8 @@ export default function Home() {
                   Pay using the vendor&apos;s {vendor.recipientType === "upi-number" ? "phone number" : "UPI ID"}
                 </h2>
                 <p>
-                  Open your trusted UPI app yourself. This production flow does
-                  not use the browser payment intent that PhonePe may decline
-                  for security reasons.
+                  Use this fallback if the UPI intent did not open or your
+                  selected UPI app declined the handoff.
                 </p>
                 <div className="phone-payment-summary">
                   <div><span>Vendor</span><b>{vendor.name}</b></div>
@@ -536,14 +618,14 @@ export default function Home() {
                   </p>
                 </div>
                 <button className="primary-button" onClick={() => setExpenseStep("return")}>I completed the payment <span>→</span></button>
-                <button className="text-button" onClick={() => setExpenseStep("confirm")}>Go back</button>
+                <button className="text-button" onClick={cancelPendingPayment}>Go back</button>
               </section>
             )}
 
             {expenseStep === "return" && vendor && (
               <section className="flow-body return-step">
                 <p className="eyebrow">STEP 3 OF 3</p><h2>Record the completed payment</h2>
-                <p>After paying in your UPI app, enter the transaction reference shown there.</p>
+                <p>EasyPay resumed after the UPI handoff. Enter the transaction reference shown by your UPI app.</p>
                 <div className="payment-recap"><span>{vendor.name}</span><b>{money.format(Number(amount))}</b><small>{vendor.vpa}</small></div>
                 <label className="text-field"><span>UPI transaction ID / UTR</span><input value={utr} onChange={(event) => setUtr(event.target.value.replace(/[^a-zA-Z0-9]/g, ""))} placeholder="Enter the reference from your UPI app" /></label>
                 <label className="receipt-upload">
@@ -552,7 +634,7 @@ export default function Home() {
                 </label>
                 <div className="verification-note"><b>Why we ask for this</b><p>A return from a UPI app does not independently confirm the bank transfer. Accounts can verify the UTR against the receipt.</p></div>
                 <button className="primary-button" onClick={submitExpense} disabled={utr.trim().length < 8}>Submit expense <span>→</span></button>
-                <button className="text-button" onClick={() => setExpenseStep("confirm")}>Payment was not completed</button>
+                <button className="text-button" onClick={cancelPendingPayment}>Payment was not completed</button>
               </section>
             )}
 
