@@ -9,7 +9,7 @@ and other organisation payments.
 - Vendor UPI QR scanning through the phone camera
 - QR image upload and manual vendor UPI ID fallback
 - Safe phone-number handoff for a 10-digit number registered as an interoperable UPI Number
-- Handoff to PhonePe, Google Pay, BHIM, or another installed UPI app
+- Copy-and-confirm handoff to PhonePe, Google Pay, BHIM, or another installed UPI app
 - UTR and optional receipt capture after personal-account payment
 - Locally saved vendor expense history with verification status
 - Monthly piti due card and payment flow
@@ -26,10 +26,14 @@ not treated as bank confirmation; submitted expenses remain pending until the
 UTR and receipt are verified by accounts.
 
 Phone-number payments work only when the recipient has registered the number as
-their UPI Number. Standard browser intents require a resolved UPI ID, so EasyPay
-copies the number and guides the employee to resolve it inside PhonePe, Google
-Pay, BHIM, or another UPI app. EasyPay never guesses a UPI handle from a mobile
-number.
+their UPI Number. EasyPay never guesses a UPI handle from a mobile number.
+
+EasyPay does not launch an unmanaged `upi://pay` browser intent for vendor
+payments. PhonePe can decline third-party browser-generated intents during its
+security checks, and a return from such an intent is not proof that money moved.
+Instead, EasyPay copies the scanned UPI ID or UPI Number and amount, then guides
+the employee to open their trusted UPI app and verify the resolved recipient
+before authorising payment.
 
 ## Run locally
 

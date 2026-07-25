@@ -3,10 +3,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type QrScanner from "qr-scanner";
 import { paymentHistory, paymentTypes } from "../data/payments";
-import { buildUpiPaymentUri, createUpiNumberRecipient, parseUpiQr, type VendorUpi } from "../lib/upi";
+import { createUpiNumberRecipient, parseUpiQr, type VendorUpi } from "../lib/upi";
 
 type Tab = "home" | "payments" | "history" | "profile";
-type ExpenseStep = "closed" | "scan" | "confirm" | "phone-handoff" | "return" | "submitted";
+type ExpenseStep = "closed" | "scan" | "confirm" | "app-handoff" | "return" | "submitted";
 type LocalExpense = {
   id: string;
   vendor: string;
@@ -48,7 +48,7 @@ export default function Home() {
   const [recipientEntry, setRecipientEntry] = useState<"upi-id" | "phone">("upi-id");
   const [utr, setUtr] = useState("");
   const [receiptName, setReceiptName] = useState("");
-  const [copiedValue, setCopiedValue] = useState<"number" | "amount" | "">("");
+  const [copiedValue, setCopiedValue] = useState<"recipient" | "amount" | "">("");
   const [expenseReference, setExpenseReference] = useState("");
   const [localExpenses, setLocalExpenses] = useState<LocalExpense[]>([]);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -169,28 +169,21 @@ export default function Home() {
     }
   }
 
-  function launchUpiApp() {
-    if (!vendor || vendor.recipientType !== "vpa" || !amount || Number(amount) <= 0) return;
-    const uri = buildUpiPaymentUri(vendor, amount, expenseCategory, expenseReference);
-    setExpenseStep("return");
-    window.location.assign(uri);
-  }
-
-  async function preparePhonePayment() {
-    if (!vendor || vendor.recipientType !== "upi-number" || !amount || Number(amount) <= 0) return;
+  async function prepareUpiPayment() {
+    if (!vendor || !amount || Number(amount) <= 0) return;
     try {
       await navigator.clipboard.writeText(vendor.vpa);
-      setCopiedValue("number");
+      setCopiedValue("recipient");
     } catch {
       setCopiedValue("");
     }
-    setExpenseStep("phone-handoff");
+    setExpenseStep("app-handoff");
   }
 
-  async function copyPhonePaymentValue(value: "number" | "amount") {
+  async function copyPaymentValue(value: "recipient" | "amount") {
     if (!vendor) return;
     try {
-      await navigator.clipboard.writeText(value === "number" ? vendor.vpa : amount);
+      await navigator.clipboard.writeText(value === "recipient" ? vendor.vpa : amount);
       setCopiedValue(value);
     } catch {
       setCopiedValue("");
@@ -464,7 +457,7 @@ export default function Home() {
                   <span className="vendor-avatar">{vendor.name.slice(0, 1).toUpperCase()}</span>
                   <div><b>{vendor.name}</b><small>{vendor.recipientType === "upi-number" ? `UPI Number · ${vendor.vpa}` : vendor.vpa}</small></div>
                   <span className={vendor.recipientType === "upi-number" ? "resolve-vendor" : "verified-vendor"}>
-                    {vendor.recipientType === "upi-number" ? "Resolve in app" : "✓ UPI"}
+                    {vendor.recipientType === "upi-number" ? "Resolve in app" : "UPI ID"}
                   </span>
                 </div>
                 {vendor.recipientType === "upi-number" && (
@@ -479,6 +472,12 @@ export default function Home() {
                     </div>
                   </>
                 )}
+                {vendor.recipientType === "vpa" && (
+                  <div className="recipient-warning">
+                    <b>Verify the recipient in your UPI app</b>
+                    <p>EasyPay can read the UPI ID from a QR, but only your UPI app can resolve the current account holder. Pay only if its verified name matches the vendor.</p>
+                  </div>
+                )}
                 <label className="amount-field">
                   <span>Amount {vendor.amountLocked && "· Set by vendor QR"}</span>
                   <div><b>₹</b><input value={amount} readOnly={vendor.amountLocked} onChange={(event) => setAmount(event.target.value.replace(/[^\d.]/g, ""))} inputMode="decimal" placeholder="0" /></div>
@@ -488,44 +487,56 @@ export default function Home() {
                 <div className="personal-account-note"><b>Paying from your personal account</b><p>Your UPI app will let you choose the linked bank account. EasyPay cannot access your PIN.</p></div>
                 <button
                   className="primary-button"
-                  onClick={vendor.recipientType === "upi-number" ? () => void preparePhonePayment() : launchUpiApp}
+                  onClick={() => void prepareUpiPayment()}
                   disabled={!amount || Number(amount) <= 0 || (vendor.recipientType === "upi-number" && vendor.name === "UPI Number recipient")}
                 >
-                  {vendor.recipientType === "upi-number" ? "Continue with phone number" : "Choose UPI app & pay"} <span>→</span>
+                  Continue to UPI app instructions <span>→</span>
                 </button>
                 <small className="secure-copy">
-                  {vendor.recipientType === "upi-number"
-                    ? "Phone numbers must be resolved from inside the selected UPI app"
-                    : "PhonePe, Google Pay, BHIM or another installed UPI app"}
+                  Recipient and amount are copied; EasyPay does not send an unverified browser payment intent
                 </small>
               </section>
             )}
 
-            {expenseStep === "phone-handoff" && vendor && (
+            {expenseStep === "app-handoff" && vendor && (
               <section className="flow-body phone-handoff-step">
                 <p className="eyebrow">COMPLETE IN YOUR UPI APP</p>
-                <h2>Pay using the vendor&apos;s phone number</h2>
+                <h2>
+                  Pay using the vendor&apos;s {vendor.recipientType === "upi-number" ? "phone number" : "UPI ID"}
+                </h2>
                 <p>
-                  Web payment intents require a resolved UPI ID, so PhonePe
-                  cannot accept this number directly from EasyPay.
+                  Open your trusted UPI app yourself. This production flow does
+                  not use the browser payment intent that PhonePe may decline
+                  for security reasons.
                 </p>
                 <div className="phone-payment-summary">
                   <div><span>Vendor</span><b>{vendor.name}</b></div>
-                  <div><span>UPI Number</span><b>{vendor.vpa}</b><button onClick={() => void copyPhonePaymentValue("number")}>{copiedValue === "number" ? "Copied" : "Copy"}</button></div>
-                  <div><span>Amount</span><b>{money.format(Number(amount))}</b><button onClick={() => void copyPhonePaymentValue("amount")}>{copiedValue === "amount" ? "Copied" : "Copy"}</button></div>
+                  <div>
+                    <span>{vendor.recipientType === "upi-number" ? "UPI Number" : "UPI ID"}</span>
+                    <b>{vendor.vpa}</b>
+                    <button onClick={() => void copyPaymentValue("recipient")}>{copiedValue === "recipient" ? "Copied" : "Copy"}</button>
+                  </div>
+                  <div><span>Amount</span><b>{money.format(Number(amount))}</b><button onClick={() => void copyPaymentValue("amount")}>{copiedValue === "amount" ? "Copied" : "Copy"}</button></div>
                 </div>
                 <ol className="phone-payment-steps">
                   <li>Open PhonePe, Google Pay, BHIM, or your preferred UPI app.</li>
-                  <li>Choose <b>To mobile number</b> or <b>UPI Number</b>.</li>
-                  <li>Paste the number above and confirm the resolved recipient is <b>{vendor.name}</b>.</li>
+                  <li>
+                    Choose <b>{vendor.recipientType === "upi-number" ? "To mobile number" : "To UPI ID"}</b>
+                    {vendor.recipientType === "upi-number" ? " or UPI Number" : ""}.
+                  </li>
+                  <li>Paste the {vendor.recipientType === "upi-number" ? "number" : "UPI ID"} above and confirm the resolved recipient matches the vendor.</li>
                   <li>Enter {money.format(Number(amount))} and complete the payment.</li>
                 </ol>
                 <div className="recipient-warning">
                   <b>Do not pay if the name does not match</b>
-                  <p>The number may be unmapped or registered to a different person. Use the vendor&apos;s QR or full UPI ID instead.</p>
+                  <p>
+                    {vendor.recipientType === "upi-number"
+                      ? "The number may be unmapped or registered to a different person. Use the vendor's QR or full UPI ID instead."
+                      : "A QR label or UPI ID is not proof of account ownership. Confirm the verified recipient name shown by your UPI app."}
+                  </p>
                 </div>
                 <button className="primary-button" onClick={() => setExpenseStep("return")}>I completed the payment <span>→</span></button>
-                <button className="text-button" onClick={() => setExpenseStep("confirm")}>Use QR or UPI ID instead</button>
+                <button className="text-button" onClick={() => setExpenseStep("confirm")}>Go back</button>
               </section>
             )}
 

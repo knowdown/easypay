@@ -70,22 +70,3 @@ export function createUpiNumberRecipient(phoneNumber: string): VendorUpi {
     merchantCode: "",
   };
 }
-
-export function buildUpiPaymentUri(
-  vendor: VendorUpi,
-  amount: string,
-  expenseLabel: string,
-  easyPayReference: string,
-) {
-  if (vendor.recipientType !== "vpa") {
-    throw new Error("A UPI Number must be resolved inside the payer's UPI app.");
-  }
-  const uri = new URL(vendor.raw);
-  uri.searchParams.set("am", Number(amount).toFixed(2));
-  uri.searchParams.set("cu", "INR");
-
-  if (!vendor.reference) uri.searchParams.set("tr", easyPayReference);
-  if (!vendor.note) uri.searchParams.set("tn", `EasyPay expense: ${expenseLabel}`);
-
-  return uri.toString();
-}
